@@ -3,6 +3,7 @@ import concurrent.futures
 import socket
 import time
 import urllib.request
+import socks  # Используется для проксирования запросов (pysocks)
 
 # Источники публичных прокси
 SOURCES = [
@@ -27,8 +28,9 @@ SOURCES = [
 ]
 
 ALLOWED_PROTOCOLS = ("vless://", "hysteria2://", "tuic://", "hy2://")
-TIMEOUT_MS = 1000  # Пинг меньше 1000 мс
-MAX_WORKERS = 50   # Число потоков проверки
+TIMEOUT_MS = 1000  # Максимальный пинг до Telegram в мс
+MAX_WORKERS = 40   # Число параллельных потоков
+TELEGRAM_CHECK_URL = "https://api.telegram.org"
 
 
 def fetch_source(url):
@@ -73,7 +75,7 @@ def parse_host_port(config_url):
 
 
 def check_node(cfg):
-    # Оставляем только стойкие к ТСПУ типы (Reality / TLS)
+    # Фильтруем типы, нестойкие к блокировкам
     if cfg.startswith("vless://"):
         if not ("security=reality" in cfg or "security=tls" in cfg):
             return None
@@ -82,10 +84,18 @@ def check_node(cfg):
     if not host or not port:
         return None
 
+    # Проверка подключения к Telegram через прокси
     start = time.perf_counter()
     try:
-        sock = socket.create_connection((host, port), timeout=TIMEOUT_MS / 1000.0)
-        sock.close()
+        # Создаем прокси-сокет
+        s = socks.socksocket()
+        s.set_proxy(socks.SOCKS5, host, port)
+        s.settimeout(TIMEOUT_MS / 1000.0)
+
+        # Пробуем подключиться к Telegram API напрямую
+        s.connect(("api.telegram.org", 443))
+        s.close()
+
         latency = (time.perf_counter() - start) * 1000
         if latency < TIMEOUT_MS:
             return cfg
@@ -103,7 +113,7 @@ def main():
         for res in results:
             raw_configs.update(res)
 
-    print(f"Собрано узлов: {len(raw_configs)}. Проверка пинга...")
+    print(f"Собрано узлов: {len(raw_configs)}. Проверка доступности Telegram...")
 
     valid_configs = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -112,7 +122,7 @@ def main():
             if res:
                 valid_configs.append(res)
 
-    print(f"Отобрано рабочих узлов (< {TIMEOUT_MS}мс): {len(valid_configs)}")
+    print(f"Отобрано рабочих узлов до Telegram (< {TIMEOUT_MS}мс): {len(valid_configs)}")
 
     payload = "\n".join(valid_configs)
     b64_sub = base64.b64encode(payload.encode("utf-8")).decode("utf-8")
