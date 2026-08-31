@@ -1,0 +1,31 @@
+name: Update Subscription
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # Каждый запуск раз в 6 часов
+  workflow_dispatch:       # Кнопка для ручного запуска
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run collector
+        run: python main.py
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add sub.txt
+          git commit -m "Auto update sub.txt [skip ci]" || exit 0
+          git push
