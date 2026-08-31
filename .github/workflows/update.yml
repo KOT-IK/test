@@ -2,8 +2,8 @@ name: Update Subscription
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # Каждый запуск раз в 6 часов
-  workflow_dispatch:       # Кнопка для ручного запуска
+    - cron: '0 */6 * * *'  # Запуск каждые 6 часов
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -18,6 +18,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install pysocks
 
       - name: Run collector
         run: python main.py
